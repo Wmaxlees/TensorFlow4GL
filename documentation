@@ -1,0 +1,27 @@
+Decorators:
+@name 'a_name': The name to pass to TensorFlow for the decorated
+@save 'a_name': Save the variable with a specific name
+@summarize type test|train: Create a summary of a specific type.
+    histogram, image, ...
+@output idx test|train: Indicates this is the output for the graph. The index will
+    corresponde to the index used to access it afterwards. Must start at
+    0 and there can be no gaps or repeats. Can be multiple per decorated.
+@TRUE_LABELS
+@PREDICTIONS
+    These two decorators are used to inform the trainer what to pass to the loss function
+
+
+'a_name': {}
+    Indicates a tf.name_scope('a_name')
+
+${var_name}: This will attempt to load a hyperparameter with the name 'var_name' into the space
+
+Types:
+op
+var
+input
+loss
+train
+
+USE ... IN ...
+PASS ... TO ...
