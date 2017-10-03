@@ -1,9 +1,11 @@
 import json
 import re
+import tensorflow as tf
 
 from tensorflowdsl.objects.input import input_op
 from tensorflowdsl.objects.namespace import namespace
 from tensorflowdsl.objects.op import op
+from tensorflowdsl.objects.trainer import trainer
 from tensorflowdsl.objects.var import var
 
 
@@ -17,9 +19,12 @@ class Runner:
 
         self.__bindings = {}
 
-        self.__output = {}
+        self.__testing_output = {}
+        self.__training_output = {}
         self.__prediction = None
         self.__true_labels = None
+
+        self.__loss = None
 
 
     def load_from_file (self, filename):
@@ -28,7 +33,9 @@ class Runner:
             model = model.build()
 
             print(model)
-            exec(model)
+            # exec('print(tf.contrib.layers)')
+            # input()
+            exec(model, globals(), locals())
 
 
     def load_hyperparameters_from_json (self, filename):
@@ -39,10 +46,6 @@ class Runner:
 
     def set_hyperparameter (self, key, value):
         self.__hyperparameters[key] = value
-
-
-    def set_optimization_fn (self, fn, learning_rate=0.1):
-        pass
 
 
     def train (self, data, labels, batch_size):
@@ -84,15 +87,35 @@ class Runner:
 
         return syntax
 
+    def __add_binding (self, scope, new_binding, details):
+        for decorator in details['decorators']:
+            new_binding.apply_decorator(decorator)
+
+        scope.add_child(new_binding)
+        self.__bindings[new_binding.get_name()] = new_binding
+
+        if details['predictor']:
+            self.__prediction = new_binding.get_name()
+        if details['true_labels']:
+            self.__true_labels = new_binding.get_name()
+        if details['output'] is not None:
+            if details['output'][1] == 'test' or details['output'][1] == 'TEST':
+                self.__testing_output[details['output'][0]] = new_binding.get_name()
+            elif details['output'][1] == 'train' or details['output'][1] == 'TRAIN':
+                self.__training_output[details['output'][0]] = new_binding.get_name()
+
     def parse_scope (self, scope_name, syntax):
         result = namespace(scope_name)
 
         lines = syntax.split('\n')
 
-        current_decorators = []
-        predictor = False
-        output = None
-        true_labels = False
+        details = {
+            'decorators': [],
+            'predictor': False,
+            'output': None,
+            'true_labels': False
+        }
+
         line_number = 0
         while line_number < len(lines):
             line = lines[line_number].strip()
@@ -101,74 +124,52 @@ class Runner:
 
             elif (line.startswith('@')):
                 if line == '@PREDICTOR' or line == '@predictor':
-                    predictor = True
+                    details['predictor'] = True
                 elif line == '@TRUE_LABELS' or line == '@true_labels':
-                    true_labels = True
+                    details['true_labels'] = True
                 elif line.startswith('@OUTPUT') or line.startswith('@output'):
-                    output_idx = line.split()[1]
-                    output = output_idx
+                    _, output_idx, output_type = line.split()
+
+                    details['output'] = (output_idx, output_type, )
                 else:
-                    current_decorators.append(line)
+                    details['decorators'].append(line)
 
             elif (line.startswith('op') or line.startswith('OP')):
                 new_op = op(line)
 
-                for decorator in current_decorators:
-                    new_op.apply_decorator(decorator)
-                current_decorators = []
+                self.__add_binding(result, new_op, details)
 
-                result.add_child(new_op)
-                self.__bindings[new_op.get_name()] = new_op
-
-                if predictor:
-                    self.__prediction = new_op.get_name()
-                    predictor = False
-                if true_labels:
-                    self.__true_labels = new_op.get_name()
-                    true_labels = False
-                if output is not None:
-                    self.__output[output] = new_op.get_name()
-                    output = None
+                details = {
+                    'decorators': [],
+                    'predictor': False,
+                    'output': None,
+                    'true_labels': False
+                }
+                
 
             elif (line.startswith('var') or line.startswith('VAR')):
                 new_var = var(line)
 
-                for decorator in current_decorators:
-                    new_var.apply_decorator(decorator)
-                current_decorators = []
-
-                result.add_child(new_var)
-                self.__bindings[new_var.get_name()] = new_var
-
-                if predictor:
-                    self.__prediction = new_var.get_name()
-                    predictor = False
-                if true_labels:
-                    self.__true_labels = new_var.get_name()
-                    true_labels = False
-                if output is not None:
-                    self.__output[output] = new_var.get_name()
-                    output = None
+                self.__add_binding(result, new_var, details)
+                
+                details = {
+                    'decorators': [],
+                    'predictor': False,
+                    'output': None,
+                    'true_labels': False
+                }
 
             elif (line.startswith('input') or line.startswith('INPUT')):
                 new_input = input_op(line)
 
-                for decorator in current_decorators:
-                    new_input.apply_decorator(decorator)
-                current_decorators = []
-
-                result.add_child(new_input)
-                self.__bindings[new_input.get_name()] = new_input
-
-                if predictor:
-                    self.__prediction = new_input.get_name()
-                    predictor = False
-                if true_labels:
-                    self.__true_labels = new_input.get_name()
-                    true_labels = False
-                if output is not None:
-                    self.__output[output] = new_input.get_name()
-                    output = None
+                self.__add_binding(result, new_input, details)
+                
+                details = {
+                    'decorators': [],
+                    'predictor': False,
+                    'output': None,
+                    'true_labels': False
+                }
 
             elif (line.startswith('use') or line.startswith('USE')):
                 tokens = line.split()[1:]
@@ -184,7 +185,34 @@ class Runner:
 
                 self.__bindings[tokens[2]].apply_input(tokens[0])
 
-            elif re.match(r'\'[a-zA-Z_]*\'\:[ \t]+\{', line):
+            elif line.startswith('loss') or line.startswith('LOSS'):
+                line = ('OP %s AS loss' % (line[5:], ))
+                new_op = op(line)
+                new_op.apply_input(self.__prediction)
+                new_op.apply_input(self.__true_labels)
+
+                self.__add_binding (result, new_op, details)
+
+                details = {
+                    'decorators': [],
+                    'predictor': False,
+                    'output': None,
+                    'true_labels': False
+                }
+
+            elif line.startswith('train') or line.startswith('TRAIN'):
+                new_trainer = trainer(line)
+
+                self.__add_binding(result, new_trainer, details)
+
+                details = {
+                    'decorators': [],
+                    'predictor': False,
+                    'output': None,
+                    'true_labels': False
+                }
+
+            elif re.match(r'\'[a-zA-Z_0-9]*\'\:[ \t]+\{', line):
                 new_scope = ''
                 new_scope_name = line.split('\'')[1]
                 while True:

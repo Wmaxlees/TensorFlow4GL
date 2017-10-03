@@ -14,7 +14,7 @@ class namespace (binding):
         self.__children.append(child)
 
     def build (self):
-        result = 'with tf.name_scope(\'%s\'):\n' % (self.__tf_name, )
+        result = 'with tf.variable_scope(\'%s\'):\n' % (self.__tf_name, )
         for child in self.__children:
             child_result = child.build()
 

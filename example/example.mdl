@@ -1,0 +1,82 @@
+@NAME 'x'
+INPUT x ${input_shape}
+
+@NAME 'y'
+INPUT y (None, )
+
+@NAME 'weights'
+INPUT weights (None, )
+
+@NAME 'b_1'
+VAR tf.zeros AS b_1 ${filters_1}
+@NAME 'b_2'
+VAR tf.zeros AS b_2 ${filters_2}
+@NAME 'b_3'
+VAR tf.zeros AS b_3 ${filters_3}
+
+'conv_1': {
+    @NAME 'kernels_1'
+    @RELU
+    OP tf.layers.conv2d AS conv_1 ARGS(${filters_1}, ${kernel_size_1}, padding='VALID')
+    @name 'bias_1'
+    OP tf.nn.bias_add as bias_1
+    USE b_1 IN bias_1
+}
+
+'conv_2': {
+    @NAME 'kernels_2'
+    @RELU
+    OP tf.layers.conv2d AS conv_2 ARGS(${filters_2}, ${kernel_size_2}, padding='VALID')
+    @NAME 'bias_2'
+    OP tf.nn.bias_add as bias_2
+    USE b_2 in bias_2
+}
+
+'conv_3': {
+    @NAME 'kernels_3'
+    @RELU
+    OP tf.layers.conv2d AS conv_3 ARGS(${filters_3}, ${kernel_size_3}, padding='VALID')
+    @NAME 'bias_3'
+    OP tf.nn.bias_add as bias_3
+    USE b_3 IN bias_3
+}
+
+'dnn': {
+    @NAME 'flattener'
+    OP tf.contrib.layers.flatten AS flattener
+
+    @NAME 'fully_connected'
+    OP tf.contrib.layers.fully_connected AS fully_connected ARGS(${hidden_layer_size})
+
+    @OUTPUT test 0
+    @OUTPUT train 0
+    @PREDICTOR
+    @NAME 'logits'
+    OP tf.contrib.layers.fully_connected AS logits ARGS(${number_of_classes}, activation_fn=tf.sigmoid)
+}
+
+'xent': {
+    @TRUE_LABELS
+    @NAME 'y_one_hot'
+    OP tf.one_hot AS y_one_hot ARGS(${number_of_classes})
+
+    LOSS tf.losses.softmax_cross_entropy
+}
+
+TRAIN tf.train.AdamOptimizer ${learning_rate}
+
+
+PASS x TO conv_1
+PASS conv_1 TO bias_1
+
+PASS bias_1 TO conv_2
+PASS conv_2 TO bias_2
+
+PASS bias_2 TO conv_3
+PASS conv_3 TO bias_3
+
+PASS bias_3 TO flattener
+PASS flattener TO fully_connected
+PASS fully_connected TO logits
+
+PASS y TO y_one_hot

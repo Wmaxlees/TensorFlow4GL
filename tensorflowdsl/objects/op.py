@@ -1,12 +1,5 @@
 from tensorflowdsl.objects.binding import binding
-
-def _split_off_next_symbol (syntax):
-    symbols = syntax.split(maxsplit=1)
-
-    if len(symbols) == 2:
-        return symbols[0], symbols[1]
-    else:
-        return symbols[0], ''
+from tensorflowdsl.objects.shared import _split_off_next_symbol
 
 class op (binding):
     def __init__ (self, op_syntax):
@@ -15,6 +8,7 @@ class op (binding):
         self.__save = None
         self.__args = ()
         self.__inputs = {}
+        self.__activation = None
 
         op_syntax_head, op_syntax_tail = _split_off_next_symbol(op_syntax)
         if op_syntax_head != 'OP' and op_syntax_head != 'op':
@@ -59,6 +53,8 @@ class op (binding):
             self.__tf_name = tokens[1]
         elif decorator == 'summarize':
             self.__summary_args.append((tokens[1], tokens[2], ))
+        elif decorator == 'relu':
+            self.__activation = 'tf.nn.relu'
         else:
             raise SyntaxError('Unknown decoration for %s: %s' % (super().get_name(), tokens[0], ))
 
@@ -82,6 +78,9 @@ class op (binding):
         if self.__tf_name is not None:
             arg_list = '%sname=%s, ' % (arg_list, self.__tf_name, )
 
-        result = '%s = %s(%s)' % (super().get_name(), self.__type, arg_list[:-2])
+        result = '%s(%s)' % (self.__type, arg_list[:-2], )
+        if self.__activation is not None:
+            result = '%s(%s)' % (self.__activation, result)
+        result = '%s = %s' % (super().get_name(), result, )
         return result
 
