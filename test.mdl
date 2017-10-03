@@ -5,63 +5,64 @@
     @SAVE 'conv_variables/W'
     @SUMMARIZE histogram test
     @NAME 'filters'
-    var filter_variable_1: random_normal ${kernel_size_1} + [1, ${filters_1}]
+    VAR tf.random_normal AS filter_variable_1 SIZE(${kernel_size_1}, 1, ${filters_1},)
 
     @SAVE 'conv_variables/b'
     @SUMMARIZE histogram test
     @NAME 'b'
-    var conv_bias_1: zeros (${filters_1}, )
+    VAR tf.zeros AS conv_bias_1 SIZE(${filters_1}, )
 }
 
 'fully_connected_variables': {
     @SAVE 'fully_connected_variables/W_1'
     @NAME 'W_1'
-    var W_1: random_normal (${hidden_layer_size_1}, ${hidden_layer_in}, )
+    VAR tf.random_normal AS W_1 SIZE(${hidden_layer_size_1}, ${hidden_layer_in}, )
 
     @SAVE 'fully_connected_variables/W_2'
     @NAME 'W_2'
-    var W_2: random_normal (1, ${hidden_layer_size_1}, )
+    VAR tf.random_normal AS W_2 SIZE(1, ${hidden_layer_size_1}, )
 
     @SAVE 'fully_connected_variables/b_1'
     @NAME 'b_1'
-    var b_1: zeros (${hidden_layer_size_1}, )
+    VAR tf.zeros AS b_1 SIZE(${hidden_layer_size_1}, )
 
     @SAVE 'fully_connected_variables/b_2'
-    var b_2: zeros (1, )
+    @NAME 'b_2'
+    VAR tf.zeros AS b_2 SIZE(1, )
 }
 
 @NAME 'x'
-input x: (None, 134, 46, 1, )
+INPUT x SIZE(None, 134, 46, 1, )
 
 @NAME 'y'
 @TRUE_LABELS
-input y: (None, 1, )
+INPUT y SIZE(None, 1, )
 
 @NAME 'avg_pool'
-average_pool as average_pooling_0: ${pool_size_0} ${pool_stride_0}
+OP tf.nn.pool AS average_pooling_0 ARGS(${pool_size_0}, 'AVG', 'VALID')
 
 
-'conv_1': {
-    OP conv2d AS conv_1: (1, 1, 1, 1, )
-    OP bias_add AS add_bias
-    OP relu6 AS relu_1
-    OP batch_norm AS batch_norm_1
-    OP dropout AS dropout_1: ${keep_prob_1}
+'conv': {
+    OP tf.layers.conv2d AS conv_1 ARGS((1, 1, 1, 1, ))
+    OP tf.nn.bias_add AS add_bias
+    OP tf.nn.relu6 AS relu_1
+    OP tf.layers.batch_norm AS batch_norm_1
+    OP tf.nn.dropout AS dropout_1 ARGS(${keep_prob})
 }
 
-OP reduce_mean AS filter_out_1: 3
+OP tf.reduce_mean AS filter_out_1 ARGS(axis=3)
 
-OP flatten AS flattener
-OP tensordot AS fully_connected_layer_1: [[1], [1]]
-OP bias_add AS full_bias_1
-OP relu6 AS relu_2
-OP dropout AS dropout_2: ${keep_prob_2}
+OP tf.contrib.layers.flatten AS flattener
+OP tf.tensordot AS fully_connected_layer_1 ARGS([[1], [1]])
+OP tf.nn.bias_add AS full_bias_1
+OP tf.nn.relu6 AS relu_2
+OP tf.nn.dropout AS dropout_2 ARGS(${keep_prob})
 
-OP tensordot AS pre_logits: [[1], [1]]
+OP tf.tensordot AS pre_logits ARGS([[1], [1]])
 
 @OUTPUT 0 test
-@PREDICTIONS
-OP bias_add AS logits
+@PREDICTOR
+OP tf.nn.bias_add AS logits
 
 
 # =========================
@@ -104,8 +105,8 @@ PASS pre_logits TO logits
 'xent': {
     @SUMMARIZE histogram train
     @OUTPUT 0 train
-    loss sigmoid_cross_entropy
+    LOSS tf.losses.sigmoid_cross_entropy
 }
 
 @NAME 'training_op'
-train adagrad: ${learning_rate}
+TRAIN tf.train.Adagrad: ${learning_rate}

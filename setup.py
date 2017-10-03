@@ -1,9 +1,9 @@
 from distutils.core import setup
 
 setup(
-    name='tensorflow_4gl',
+    name='tensorflowdsl',
     version='0.1dev',
-    packages=['tensorflow_4gl',],
+    packages=['tensorflowdsl',],
     license='',
     long_description=open('README.md').read(),
 )
